@@ -16,7 +16,7 @@ import java.text.DecimalFormat
 class AllAnime : AnimeParser() {
     override val name = "AllAnime"
     override val saveName = "allanime"
-    override val hostUrl = "https://allanime.to"
+    override val hostUrl = "https://allanime.co"
     override val isDubAvailableSeparately = true
 
     private val apiHost = "https://api.allanime.co/"
