@@ -30,32 +30,48 @@ class AllAnime : AnimeParser() {
     private val searchHash = "9c7a8bc1e095a34f2972699e8105f7aaf9082c6e1ccd56eab99c2f1a971152c6"
     private val videoServerHash = "1f0a5d6c9ce6cd3127ee4efd304349345b0737fbf5ec33a60bbc3d18e3bb7c61"
 
-    override suspend fun loadEpisodes(animeLink: String, extra: Map<String, String>?): List<Episode> {
-        val responseArray = mutableListOf<Episode>()
+    override fun episodeListRequest(anime: SAnime): Request {
+        val variables = """{"_id":"${anime.url}"}"""
+        val extensions = """{"persistedQuery":{"version":1,"sha256Hash":"$_idHash"}}"""
+        val headers = headers.newBuilder()
+            .set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:101.0) Gecko/20100101 Firefox/101.0")
+            .build()
+        return GET("$baseUrl/allanimeapi?variables=$variables&extensions=$extensions", headers = headers)
+    }
 
-        val showId = idRegex.find(animeLink)?.groupValues?.get(1)
-        if (showId != null) {
-            val episodeInfos = getEpisodeInfos(showId)
-            val format = DecimalFormat("#####.#####")
-            episodeInfos?.sortedBy { it.episodeIdNum }?.forEach { epInfo ->
-                val link = """${hostUrl}/anime/$showId/episodes/${if (selectDub) "dub" else "sub"}/${epInfo.episodeIdNum}"""
-                val epNum = format.format(epInfo.episodeIdNum).toString()
-                val thumbnail = epInfo.thumbnails?.let {
+    override fun episodeListParse(response: Response): List<SEpisode> {
+        val medias = json.decodeFromString<SeriesResult>(response.body!!.string())
+        val episodeList = mutableListOf<SEpisode>()
 
-                    if (it.isNotEmpty()) {
-                        var url = it[0]
-                        if (!url.startsWith("https")) {
-                            url = "$ytAnimeCoversHost$url"
-                        }
-                        FileUrl(url)
-                    } else {
-                        null
-                    }
-                }
-                responseArray.add(Episode(epNum, link = link, epInfo.notes, thumbnail))
+        val subOrDub = preferences.getString("preferred_sub", "sub")!!
+
+        if (subOrDub == "sub") {
+            for (ep in medias.data.show.availableEpisodesDetail.sub!!) {
+                val episode = SEpisode.create()
+                episode.episode_number = ep.toFloatOrNull() ?: 0F
+                val numName = ep.toIntOrNull() ?: (ep.toFloatOrNull() ?: "1")
+                episode.name = "Episode $numName (sub)"
+
+                val variables = """{"showId":"${medias.data.show._id}","translationType":"sub","episodeString":"$ep"}"""
+                val extensions = """{"persistedQuery":{"version":1,"sha256Hash":"$episodeHash"}}"""
+                episode.setUrlWithoutDomain("/allanimeapi?variables=$variables&extensions=$extensions")
+                episodeList.add(episode)
+            }
+        } else {
+            for (ep in medias.data.show.availableEpisodesDetail.dub!!) {
+                val episode = SEpisode.create()
+                episode.episode_number = ep.toFloatOrNull() ?: 0F
+                val numName = ep.toIntOrNull() ?: (ep.toFloatOrNull() ?: "1")
+                episode.name = "Episode $numName (dub)"
+
+                val variables = """{"showId":"${medias.data.show._id}","translationType":"dub","episodeString":"$ep"}"""
+                val extensions = """{"persistedQuery":{"version":1,"sha256Hash":"$episodeHash"}}"""
+                episode.setUrlWithoutDomain("/allanimeapi?variables=$variables&extensions=$extensions")
+                episodeList.add(episode)
             }
         }
-        return responseArray
+
+        return episodeList
     }
 
     override suspend fun loadVideoServers(episodeLink: String, extra: Map<String, String>?): List<VideoServer> {
